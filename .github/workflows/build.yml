@@ -1,13 +1,10 @@
 name: nRF7002 West Build
 
 on:
-  # Trigger on push to main branches
   push:
     branches:
       - nRF-WiFi
       - main
-
-  # Trigger on pull request
   pull_request:
     branches:
       - nRF-WiFi
@@ -41,39 +38,41 @@ jobs:
       - name: Install West
         run: pip3 install west
 
-      # Step 4 - Verify West installation
+      # Step 4 - Verify West version
       - name: Verify West Version
         run: west --version
 
-      # Step 5 - Install nRF Connect SDK v3.0.0 using West
-      - name: Initialise nRF Connect SDK
+      # Step 5 - Install Zephyr SDK v0.17.0 (compatible with nRF Connect SDK v3.3.0)
+      - name: Install Zephyr SDK
+        run: |
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64.tar.xz
+          tar xf zephyr-sdk-0.17.0_linux-x86_64.tar.xz -C $HOME
+          cd $HOME/zephyr-sdk-0.17.0
+          ./setup.sh -t arm-zephyr-eabi -h -c
+          # Add toolchain to PATH
+          echo "$HOME/zephyr-sdk-0.17.0/arm-zephyr-eabi/bin" >> $GITHUB_PATH
+
+      # Step 6 - Verify ARM toolchain
+      - name: Verify ARM Toolchain
+        run: arm-zephyr-eabi-gcc --version
+
+      # Step 7 - Initialise nRF Connect SDK v3.3.0 using West
+      - name: Initialise nRF Connect SDK v3.3.0
         run: |
           mkdir -p ncs
           cd ncs
-          west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.0.0
+          west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.0
           west update
           west zephyr-export
 
-      # Step 6 - Install Python requirements for Zephyr and nRF SDK
+      # Step 8 - Install Python requirements for Zephyr and nRF SDK
       - name: Install Python Requirements
         run: |
           pip3 install -r ncs/zephyr/scripts/requirements.txt
           pip3 install -r ncs/nrf/scripts/requirements.txt
           pip3 install -r ncs/bootloader/mcuboot/scripts/requirements.txt
 
-      # Step 7 - Install Zephyr SDK toolchain
-      - name: Install Zephyr SDK
-        run: |
-          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.16.8/zephyr-sdk-0.16.8_linux-x86_64.tar.xz
-          tar xf zephyr-sdk-0.16.8_linux-x86_64.tar.xz
-          cd zephyr-sdk-0.16.8
-          ./setup.sh -t arm-zephyr-eabi -h -c
-
-      # Step 8 - Verify ARM toolchain
-      - name: Verify ARM Toolchain
-        run: arm-zephyr-eabi-gcc --version
-
-      # Step 9 - Build firmware using West + Sysbuild
+      # Step 9 - Build nRF7002 firmware using West + Sysbuild
       - name: Build nRF7002 Firmware
         run: |
           cd ncs
