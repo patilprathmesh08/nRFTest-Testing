@@ -40,7 +40,7 @@ static void button_handler(uint32_t button_state,
     }
 
     if (has_changed & DK_BTN2_MSK) {
-        printk("Button 2\n");
+        // printk("Button 2\n");
 		 if (tcp_connected) {
 			dk_set_led_on(DK_LED2);
             char *msg = "PINETICS 2nd branch--->";
