@@ -49,7 +49,6 @@ jobs:
           tar xf zephyr-sdk-0.17.0_linux-x86_64.tar.xz -C $HOME
           cd $HOME/zephyr-sdk-0.17.0
           ./setup.sh -t arm-zephyr-eabi -h -c
-          # Add toolchain to PATH
           echo "$HOME/zephyr-sdk-0.17.0/arm-zephyr-eabi/bin" >> $GITHUB_PATH
 
       # Step 6 - Verify ARM toolchain
@@ -65,7 +64,7 @@ jobs:
           west update
           west zephyr-export
 
-      # Step 8 - Install Python requirements for Zephyr and nRF SDK
+      # Step 8 - Install Python requirements
       - name: Install Python Requirements
         run: |
           pip3 install -r ncs/zephyr/scripts/requirements.txt
@@ -73,16 +72,24 @@ jobs:
           pip3 install -r ncs/bootloader/mcuboot/scripts/requirements.txt
 
       # Step 9 - Build nRF7002 firmware using West + Sysbuild
+      # Board target: nrf7002dk/nrf5340/cpuapp/ns (non-secure - matches your board config)
+      # Uses your prj.conf automatically from CNR-Joyastic folder
+      # All WiFi, BLE, networking configs from prj.conf are picked up automatically
       - name: Build nRF7002 Firmware
         run: |
           cd ncs
-          west build -b nrf7002dk/nrf5340/cpuapp \
+          west build -b nrf7002dk/nrf5340/cpuapp/ns \
             ../nrftest-testing/CNR-Joyastic \
             --sysbuild \
-            -d ../nrftest-testing/CNR-Joyastic/build \
-            -- -DCONFIG_WIFI=y
+            -d ../nrftest-testing/CNR-Joyastic/build
 
-      # Step 10 - Upload firmware artifacts
+      # Step 10 - Show memory usage after build
+      - name: Show Memory Usage
+        run: |
+          echo "=== Memory Usage ==="
+          size nrftest-testing/CNR-Joyastic/build/zephyr/zephyr.elf || true
+
+      # Step 11 - Upload firmware artifacts
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
         with:
