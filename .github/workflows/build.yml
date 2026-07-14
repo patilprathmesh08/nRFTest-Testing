@@ -42,7 +42,7 @@ jobs:
       - name: Verify West Version
         run: west --version
 
-      # Step 5 - Install Zephyr SDK v0.17.0 (compatible with nRF Connect SDK v3.3.0)
+      # Step 5 - Install Zephyr SDK v0.17.0
       - name: Install Zephyr SDK
         run: |
           wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64.tar.xz
@@ -55,7 +55,7 @@ jobs:
       - name: Verify ARM Toolchain
         run: arm-zephyr-eabi-gcc --version
 
-      # Step 7 - Initialise nRF Connect SDK v3.3.0 using West
+      # Step 7 - Initialise nRF Connect SDK v3.3.0
       - name: Initialise nRF Connect SDK v3.3.0
         run: |
           mkdir -p ncs
@@ -72,9 +72,6 @@ jobs:
           pip3 install -r ncs/bootloader/mcuboot/scripts/requirements.txt
 
       # Step 9 - Build nRF7002 firmware using West + Sysbuild
-      # Board target: nrf7002dk/nrf5340/cpuapp/ns (non-secure - matches your board config)
-      # Uses your prj.conf automatically from CNR-Joyastic folder
-      # All WiFi, BLE, networking configs from prj.conf are picked up automatically
       - name: Build nRF7002 Firmware
         run: |
           cd ncs
@@ -83,19 +80,48 @@ jobs:
             --sysbuild \
             -d ../nrftest-testing/CNR-Joyastic/build
 
-      # Step 10 - Show memory usage after build
+      # Step 10 - Show memory usage
       - name: Show Memory Usage
         run: |
-          echo "=== Memory Usage ==="
-          size nrftest-testing/CNR-Joyastic/build/zephyr/zephyr.elf || true
+          echo "=== Application Core Memory Usage ==="
+          size nrftest-testing/CNR-Joyastic/build/CNR-Joyastic/zephyr/zephyr.elf || true
+          echo "=== Network Core Memory Usage ==="
+          size nrftest-testing/CNR-Joyastic/build/ipc_radio/zephyr/zephyr.elf || true
 
-      # Step 11 - Upload firmware artifacts
+      # Step 11 - List all build output files
+      - name: List Build Output Files
+        run: |
+          echo "=== Build output files ==="
+          find nrftest-testing/CNR-Joyastic/build -name "*.hex" -o -name "*.elf" -o -name "*.bin" | sort
+
+      # Step 12 - Upload ALL firmware artifacts
+      # Flash order on board:
+      # 1. merged_CPUNET.hex first (network core - ipc_radio)
+      # 2. merged.hex second (application core)
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: nrf7002-firmware
           path: |
+            nrftest-testing/CNR-Joyastic/build/merged_CPUNET.hex
             nrftest-testing/CNR-Joyastic/build/merged.hex
-            nrftest-testing/CNR-Joyastic/build/zephyr/zephyr.elf
-            nrftest-testing/CNR-Joyastic/build/zephyr/zephyr.bin
+            nrftest-testing/CNR-Joyastic/build/CNR-Joyastic/zephyr/zephyr.elf
+            nrftest-testing/CNR-Joyastic/build/CNR-Joyastic/zephyr/zephyr.bin
           retention-days: 7
+
+      # Step 13 - Add flashing instructions as build summary
+      - name: Add Flash Instructions to Summary
+        run: |
+          echo "## Flash Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Flash in this exact order using nRF Connect Programmer:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Step 1** - Flash network core first:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "merged_CPUNET.hex" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Step 2** - Flash application core:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "merged.hex" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
