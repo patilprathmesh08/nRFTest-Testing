@@ -23,22 +23,23 @@ jobs:
         with:
           path: nrftest-testing
 
-      # Step 2 - Copy code to C: drive (required - west cannot build across drives)
-      - name: Copy Code to C Drive
+      # Step 2 - Copy bat file to C: drive
+      # bat file must be on C: drive to run correctly
+      - name: Copy Build Script to C Drive
         shell: cmd
         run: |
-          if exist C:\Workspace\nRFTest-Testing rmdir /S /Q C:\Workspace\nRFTest-Testing
-          xcopy /E /I /Q %GITHUB_WORKSPACE%\nrftest-testing C:\Workspace\nRFTest-Testing
+          if not exist C:\Workspace\nRFTest-Testing\CNR-Joyastic mkdir C:\Workspace\nRFTest-Testing\CNR-Joyastic
+          copy %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic\build_nrf_v3.bat C:\Workspace\nRFTest-Testing\CNR-Joyastic\build_nrf_v3.bat
 
-      # Step 3 - Build nRF7002 firmware using bat script
-      # bat script sets all nRF environment variables temporarily
-      # Does NOT affect system PATH or local VS Code build
+      # Step 3 - Build nRF7002 firmware using bat script v3
+      # bat script copies source to C: drive then builds
+      # Source on G: drive is OK - bat handles cross drive copy
       - name: Build nRF7002 Firmware
         shell: cmd
         run: |
-          C:\Workspace\nRFTest-Testing\CNR-Joyastic\build_nrf.bat ^
-            C:\Workspace\nRFTest-Testing\CNR-Joyastic ^
-            C:\Workspace\nRFTest-Testing\CNR-Joyastic\build
+          C:\Workspace\nRFTest-Testing\CNR-Joyastic\build_nrf_v3.bat ^
+            %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic ^
+            C:\Workspace\build_output
 
       # Step 4 - Upload ALL firmware artifacts
       # Flash order on board:
@@ -51,8 +52,8 @@ jobs:
         with:
           name: nrf7002-firmware
           path: |
-            C:\Workspace\nRFTest-Testing\CNR-Joyastic\build\merged_CPUNET.hex
-            C:\Workspace\nRFTest-Testing\CNR-Joyastic\build\merged.hex
+            C:\Workspace\build_output\merged_CPUNET.hex
+            C:\Workspace\build_output\merged.hex
           retention-days: 7
 
       # Step 5 - Add flashing instructions as build summary
