@@ -23,33 +23,36 @@ jobs:
         with:
           path: nrftest-testing
 
-      # Step 2 - Build nRF7002 firmware
-      # Running west from project folder - not from ncs folder
+      # Step 2 - Copy code to C: drive (required - west cannot build across drives)
+      - name: Copy Code to C Drive
+        shell: cmd
+        run: |
+          if exist C:\Workspace\nRFTest-Testing rmdir /S /Q C:\Workspace\nRFTest-Testing
+          xcopy /E /I /Q %GITHUB_WORKSPACE%\nrftest-testing C:\Workspace\nRFTest-Testing
+
+      # Step 3 - Build nRF7002 firmware using bat script
+      # bat script sets all nRF environment variables temporarily
+      # Does NOT affect system PATH or local VS Code build
       - name: Build nRF7002 Firmware
         shell: cmd
         run: |
-          set PATH=C:\ncs\toolchains\936afb6332\opt\bin;C:\ncs\toolchains\936afb6332\opt\bin\Scripts;%PATH%
-          set ZEPHYR_BASE=C:\ncs\v3.3.0\zephyr
-          set ZEPHYR_TOOLCHAIN_VARIANT=zephyr
-          set ZEPHYR_SDK_INSTALL_DIR=C:\ncs\toolchains\936afb6332
-          cd %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic
-          C:\ncs\toolchains\936afb6332\opt\bin\python.exe C:\ncs\toolchains\936afb6332\opt\bin\Scripts\west.exe build -b nrf7002dk/nrf5340/cpuapp/ns . --sysbuild -d %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic\build
-
-      # Step 3 - List all build output files
-      - name: List Build Output Files
-        shell: powershell
-        run: |
-          echo "=== Build output files ==="
-          Get-ChildItem -Path nrftest-testing\CNR-Joyastic\build -Recurse -Include *.hex,*.elf,*.bin
+          C:\Workspace\nRFTest-Testing\CNR-Joyastic\build_nrf.bat ^
+            C:\Workspace\nRFTest-Testing\CNR-Joyastic ^
+            C:\Workspace\nRFTest-Testing\CNR-Joyastic\build
 
       # Step 4 - Upload ALL firmware artifacts
+      # Flash order on board:
+      # 1. merged_CPUNET.hex first (network core)
+      # 2. Reset board
+      # 3. merged.hex second (application core)
+      # 4. Reset board
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: nrf7002-firmware
           path: |
-            nrftest-testing\CNR-Joyastic\build\merged_CPUNET.hex
-            nrftest-testing\CNR-Joyastic\build\merged.hex
+            C:\Workspace\nRFTest-Testing\CNR-Joyastic\build\merged_CPUNET.hex
+            C:\Workspace\nRFTest-Testing\CNR-Joyastic\build\merged.hex
           retention-days: 7
 
       # Step 5 - Add flashing instructions as build summary
