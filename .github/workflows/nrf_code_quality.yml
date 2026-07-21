@@ -23,27 +23,32 @@ jobs:
         with:
           path: nrftest-testing
 
-      # Step 2 - Build nRF7002 firmware using West + Sysbuild
-      # nRF Connect SDK v3.3.0 already installed on Windows PC via VS Code
+      # Step 2 - Verify nRF SDK path
+      - name: Verify nRF SDK Path
+        shell: cmd
+        run: |
+          dir C:\ncs
+
+      # Step 3 - Build nRF7002 firmware
+      # nRF Connect SDK installed at C:\ncs on Windows PC
       - name: Build nRF7002 Firmware
         shell: cmd
         run: |
-          call "%USERPROFILE%\ncs\v3.3.0\zephyr\zephyr-env.cmd"
-          west build -b nrf7002dk/nrf5340/cpuapp/ns ^
+          call "C:\ncs\toolchains\v3.3.0\cmd\west.cmd" build -b nrf7002dk/nrf5340/cpuapp/ns ^
             %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic ^
             --sysbuild ^
             -d %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic\build
 
-      # Step 3 - List all build output files
+      # Step 4 - List all build output files
       - name: List Build Output Files
         shell: powershell
         run: |
           echo "=== Build output files ==="
           Get-ChildItem -Path nrftest-testing\CNR-Joyastic\build -Recurse -Include *.hex,*.elf,*.bin
 
-      # Step 4 - Upload ALL firmware artifacts
+      # Step 5 - Upload ALL firmware artifacts
       # Flash order on board:
-      # 1. merged_CPUNET.hex first (network core - ipc_radio)
+      # 1. merged_CPUNET.hex first (network core)
       # 2. Reset board
       # 3. merged.hex second (application core)
       # 4. Reset board
@@ -56,7 +61,7 @@ jobs:
             nrftest-testing\CNR-Joyastic\build\merged.hex
           retention-days: 7
 
-      # Step 5 - Add flashing instructions as build summary
+      # Step 6 - Add flashing instructions as build summary
       - name: Add Flash Instructions to Summary
         shell: powershell
         run: |
@@ -80,7 +85,6 @@ jobs:
           fetch-depth: 0
 
       # ─── CHECK 1: HEADER AND COPYRIGHT NOTICE (WARNING ONLY) ────────────────
-      # Only checks CNR-Joyastic/src/ folder
       - name: Check File Headers and Copyright Notice
         shell: powershell
         run: |
@@ -101,7 +105,6 @@ jobs:
           }
 
       # ─── CHECK 2: DOXYGEN DOCUMENTATION CHECK (WARNING ONLY) ────────────────
-      # Doxygen must be installed on Windows PC
       - name: Setup Doxyfile
         shell: powershell
         working-directory: CNR-Joyastic
