@@ -24,24 +24,16 @@ jobs:
           path: nrftest-testing
 
       # Step 2 - Build nRF7002 firmware
-      # nRF Connect SDK v3.3.0 installed at C:\ncs
-      # Python: C:\ncs\toolchains\936afb6332\opt\bin\python.exe
-      # West:   C:\ncs\toolchains\936afb6332\opt\bin\Scripts\west.exe
+      # Running west from project folder - not from ncs folder
       - name: Build nRF7002 Firmware
         shell: cmd
         run: |
-          set PYTHONPATH=C:\ncs\toolchains\936afb6332\opt\bin
           set PATH=C:\ncs\toolchains\936afb6332\opt\bin;C:\ncs\toolchains\936afb6332\opt\bin\Scripts;%PATH%
           set ZEPHYR_BASE=C:\ncs\v3.3.0\zephyr
           set ZEPHYR_TOOLCHAIN_VARIANT=zephyr
           set ZEPHYR_SDK_INSTALL_DIR=C:\ncs\toolchains\936afb6332
-          cd C:\ncs\v3.3.0
-          C:\ncs\toolchains\936afb6332\opt\bin\python.exe ^
-            C:\ncs\toolchains\936afb6332\opt\bin\Scripts\west.exe ^
-            build -b nrf7002dk/nrf5340/cpuapp/ns ^
-            %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic ^
-            --sysbuild ^
-            -d %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic\build
+          cd %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic
+          C:\ncs\toolchains\936afb6332\opt\bin\python.exe C:\ncs\toolchains\936afb6332\opt\bin\Scripts\west.exe build -b nrf7002dk/nrf5340/cpuapp/ns . --sysbuild -d %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic\build
 
       # Step 3 - List all build output files
       - name: List Build Output Files
