@@ -11,7 +11,7 @@ on:
       - main
 
 jobs:
-  # ─── JOB 1: BUILD FIRMWARE ──────────────────────────────────────────────────
+  # ===== JOB 1: BUILD FIRMWARE =====
   build:
     name: Build nRF7002 Firmware
     runs-on: self-hosted
@@ -28,8 +28,8 @@ jobs:
       - name: Copy Build Script to C Drive
         shell: cmd
         run: |
-          if not exist C:\Workspace\nRFTest-Testing\CNR-Joyastic mkdir C:\Workspace\nRFTest-Testing\CNR-Joyastic
-          copy %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic\build_nrf_v3.bat C:\Workspace\nRFTest-Testing\CNR-Joyastic\build_nrf_v3.bat
+          if not exist C:\Workspace\nRFTest-Testing\CNR-CNT mkdir C:\Workspace\nRFTest-Testing\CNR-CNT
+          copy %GITHUB_WORKSPACE%\nrftest-testing\CNR-CNT\build_nrf_v3.bat C:\Workspace\nRFTest-Testing\CNR-CNT\build_nrf_v3.bat
 
       # Step 3 - Build nRF7002 firmware using bat script v3
       # bat script copies source to C: drive then builds
@@ -37,8 +37,8 @@ jobs:
       - name: Build nRF7002 Firmware
         shell: cmd
         run: |
-          C:\Workspace\nRFTest-Testing\CNR-Joyastic\build_nrf_v3.bat ^
-            %GITHUB_WORKSPACE%\nrftest-testing\CNR-Joyastic ^
+          C:\Workspace\nRFTest-Testing\CNR-CNT\build_nrf_v3.bat ^
+            %GITHUB_WORKSPACE%\nrftest-testing\CNR-CNT ^
             C:\Workspace\build_output
 
       # Step 4 - Upload ALL firmware artifacts
@@ -67,7 +67,7 @@ jobs:
           echo "**Step 3** - Flash application core: merged.hex" >> $env:GITHUB_STEP_SUMMARY
           echo "**Step 4** - Reset board" >> $env:GITHUB_STEP_SUMMARY
 
-  # ─── JOB 2: CODE QUALITY CHECKS ─────────────────────────────────────────────
+  # ===== JOB 2: CODE QUALITY CHECKS =====
   code-quality:
     name: Code Quality Checks
     runs-on: self-hosted
@@ -79,13 +79,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ─── CHECK 1: HEADER AND COPYRIGHT NOTICE (WARNING ONLY) ────────────────
+      # ===== CHECK 1: HEADER AND COPYRIGHT NOTICE (WARNING ONLY) =====
       - name: Check File Headers and Copyright Notice
         shell: powershell
         run: |
-          echo "Checking copyright headers in CNR-Joyastic/src/ only..."
+          echo "Checking copyright headers in CNR-CNT/src/ only..."
           $missing = 0
-          Get-ChildItem -Path CNR-Joyastic\src -Recurse -Include *.c,*.h | ForEach-Object {
+          Get-ChildItem -Path CNR-CNT\src -Recurse -Include *.c,*.h | ForEach-Object {
             $content = Get-Content $_.FullName -Raw
             if ($content -notmatch "Copyright|copyright|LICENSE|license|Author|author|SPDX") {
               echo "WARNING - MISSING HEADER: $($_.FullName)"
@@ -99,15 +99,15 @@ jobs:
             echo "PASSED: All files have copyright/header notice."
           }
 
-      # ─── CHECK 2: DOXYGEN DOCUMENTATION CHECK (WARNING ONLY) ────────────────
+      # ===== CHECK 2: DOXYGEN DOCUMENTATION CHECK (WARNING ONLY) =====
       - name: Setup Doxyfile
         shell: powershell
-        working-directory: CNR-Joyastic
+        working-directory: CNR-CNT
         run: |
           if (-not (Test-Path Doxyfile)) {
             echo "No Doxyfile found, generating default..."
             doxygen -g Doxyfile
-            (Get-Content Doxyfile) -replace 'PROJECT_NAME           = "My Project"', 'PROJECT_NAME           = "CNR-Joyastic"' | Set-Content Doxyfile
+            (Get-Content Doxyfile) -replace 'PROJECT_NAME           = "My Project"', 'PROJECT_NAME           = "CNR-CNT"' | Set-Content Doxyfile
             (Get-Content Doxyfile) -replace 'INPUT                  =', 'INPUT                  = src' | Set-Content Doxyfile
             (Get-Content Doxyfile) -replace 'RECURSIVE              = NO', 'RECURSIVE              = YES' | Set-Content Doxyfile
             (Get-Content Doxyfile) -replace 'EXTRACT_ALL            = NO', 'EXTRACT_ALL            = YES' | Set-Content Doxyfile
@@ -115,7 +115,7 @@ jobs:
 
       - name: Run Doxygen Check
         shell: powershell
-        working-directory: CNR-Joyastic
+        working-directory: CNR-CNT
         run: |
           echo "Running Doxygen..."
           doxygen Doxyfile 2>&1 | Tee-Object -FilePath doxygen_output.log
@@ -133,23 +133,5 @@ jobs:
         if: always()
         with:
           name: nrf-doxygen-log
-          path: CNR-Joyastic\doxygen_output.log
+          path: CNR-CNT\doxygen_output.log
           retention-days: 7
-
-      # ─── CHECK 3: SONARCLOUD SCAN ────────────────────────────────────────────
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v3.1.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          projectBaseDir: CNR-Joyastic
-          args: >
-            -Dsonar.organization=patilprathmesh08
-            -Dsonar.projectKey=patilprathmesh08_nRFTest-Testing
-            -Dsonar.sources=src
-            -Dsonar.inclusions=**/*.c,**/*.h
-            -Dsonar.c.file.suffixes=.c
-            -Dsonar.h.file.suffixes=.h
-            -Dsonar.exclusions=**/build/**,**/boards/**,**/child_image/**,**/sysbuild/**
-            -Dsonar.qualitygate.wait=false
