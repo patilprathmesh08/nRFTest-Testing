@@ -1,0 +1,70 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+#include <zephyr/dt-bindings/adc/nrf-saadc.h>
+
+/*
+ * This overlay is applied to all boards and sets the local MAC address
+ * for the Wi-Fi interface when the nRF70 OTP is not programmed.
+ *
+ * The MAC address should use a locally administered address (LAA) with
+ * the second least significant bit of the first octet set to 1.
+ * Nordic OUI prefix for LAA: F6:CE:36:xx:xx:xx
+ */
+
+&wlan0 {
+	local-mac-address = [f6 ce 36 00 00 01];
+};
+
+/*
+ * ADC setup for joystick X/Y input (added for main.c v3, uint16_t
+ * 0-4095 range).
+ *   channel 0 -> AIN0 (P0.04, Arduino label A0) -> joystick X
+ *   channel 1 -> AIN1 (P0.05, Arduino label A1) -> joystick Y
+ * Pin mapping per Table 5, "Mapping of analog pins", nRF7002 DK Hardware
+ * User Guide v1.0.0.
+ *
+ * GAIN (v3->v4 change): was ADC_GAIN_1_6 (full-scale = 0.6V / (1/6) =
+ * 3.6V). The HW-504 joystick is powered from this board's own VDD
+ * (~1.8V, confirmed via calibration: resting center reads ~1015/4095,
+ * and 1015/4095*3.6V = ~0.89V = half of 1.8V, exactly as expected for a
+ * resistive-divider joystick at rest). With the 3.6V full-scale setting,
+ * the joystick's actual 0-1.8V swing only ever produced raw readings of
+ * roughly 0-2070 - the upper half of the 0-4095 range was never used.
+ * Changed to ADC_GAIN_1_3 (full-scale = 0.6V / (1/3) = 1.8V) so the
+ * joystick's real 0-1.8V swing now maps across the FULL 0-4095 range,
+ * doubling effective resolution with no other code changes needed.
+ */
+/ {
+	zephyr,user {
+		/* index 0 = X (AIN0/P0.04), index 1 = Y (AIN1/P0.05) -
+		 * order matters, main.c reads them by index 0 and 1 */
+		io-channels = <&adc 0>, <&adc 1>;
+	};
+};
+
+&adc {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1_3";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN0>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@1 {
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1_3";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN1>;
+		zephyr,resolution = <12>;
+	};
+};
