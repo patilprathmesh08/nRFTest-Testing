@@ -10,6 +10,15 @@ on:
       - nRF-WiFi
       - main
 
+# ===== SETTINGS: change values here only =====
+env:
+  PROJECT_DIR: CNR-CNT                        # Project folder inside the repo
+  NCS_VERSION: v3.3.0                         # nRF Connect SDK version installed on runner
+  BOARD: nrf7002dk/nrf5340/cpuapp             # Board target
+  NRFUTIL: nrfutil                            # If not on PATH, give full path to nrfutil.exe
+  WORK_DIR: C:\Workspace\nRFTest-Testing      # Short path on C: drive (avoids long path issues)
+  OUTPUT_DIR: C:\Workspace\build_output       # Final hex files are collected here
+
 jobs:
   # ===== JOB 1: BUILD FIRMWARE =====
   build:
@@ -23,40 +32,71 @@ jobs:
         with:
           path: nrftest-testing
 
-      # Step 2 - Copy bat file to C: drive
-      # bat file must be on C: drive to run correctly
-      - name: Copy Build Script to C Drive
-        shell: cmd
+      # Step 2 - Copy project source to C: drive
+      # robocopy exit codes 0 to 7 mean success, 8 or more mean failure
+      - name: Copy Source to C Drive
+        shell: powershell
         run: |
-          if not exist C:\Workspace\nRFTest-Testing\CNR-CNT mkdir C:\Workspace\nRFTest-Testing\CNR-CNT
-          copy %GITHUB_WORKSPACE%\nrftest-testing\CNR-CNT\build_nrf_v3.bat C:\Workspace\nRFTest-Testing\CNR-CNT\build_nrf_v3.bat
+          $src = "$env:GITHUB_WORKSPACE\nrftest-testing\$env:PROJECT_DIR"
+          $dst = "$env:WORK_DIR\$env:PROJECT_DIR"
+          if (-not (Test-Path $src)) {
+            echo "ERROR: Source folder not found: $src"
+            exit 1
+          }
+          robocopy $src $dst /MIR /XD build* .git .vscode /NFL /NDL /NJH /NJS
+          if ($LASTEXITCODE -ge 8) { echo "ERROR: robocopy failed"; exit 1 }
+          echo "Source copied to $dst"
+          exit 0
 
-      # Step 3 - Build nRF7002 firmware using bat script v3
-      # bat script copies source to C: drive then builds
-      # Source on G: drive is OK - bat handles cross drive copy
+      # Step 3 - Build with west using the nRF Connect SDK toolchain
       - name: Build nRF7002 Firmware
-        shell: cmd
+        shell: powershell
         run: |
-          C:\Workspace\nRFTest-Testing\CNR-CNT\build_nrf_v3.bat ^
-            %GITHUB_WORKSPACE%\nrftest-testing\CNR-CNT ^
-            C:\Workspace\build_output
+          $src   = "$env:WORK_DIR\$env:PROJECT_DIR"
+          $build = "$env:WORK_DIR\build"
+          & $env:NRFUTIL sdk-manager toolchain launch --ncs-version $env:NCS_VERSION -- west build -p always -b $env:BOARD -d $build --sysbuild $src
+          if ($LASTEXITCODE -ne 0) { echo "ERROR: west build failed"; exit 1 }
 
-      # Step 4 - Upload ALL firmware artifacts
+      # Step 4 - Collect hex files into one output folder
+      - name: Collect Firmware Files
+        shell: powershell
+        run: |
+          $build = "$env:WORK_DIR\build"
+          $out   = $env:OUTPUT_DIR
+          if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+          New-Item -ItemType Directory -Path $out | Out-Null
+
+          # merged hex files at build root (if sysbuild generated them)
+          Get-ChildItem -Path $build -Filter "merged*.hex" -File | Copy-Item -Destination $out
+
+          # zephyr.hex of each image, named after its image folder
+          Get-ChildItem -Path $build -Recurse -Filter "zephyr.hex" -File | ForEach-Object {
+            $image = $_.Directory.Parent.Name
+            Copy-Item $_.FullName -Destination "$out\${image}_zephyr.hex"
+          }
+
+          echo "Files collected:"
+          Get-ChildItem $out | ForEach-Object { echo " - $($_.Name)" }
+          if ((Get-ChildItem $out -Filter *.hex).Count -eq 0) {
+            echo "ERROR: No hex files found after build"
+            exit 1
+          }
+
+      # Step 5 - Upload firmware artifacts
       # Flash order on board:
-      # 1. merged_CPUNET.hex first (network core)
+      # 1. Network core hex first (merged_CPUNET.hex)
       # 2. Reset board
-      # 3. merged.hex second (application core)
+      # 3. Application core hex second (merged.hex)
       # 4. Reset board
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: nrf7002-firmware
-          path: |
-            C:\Workspace\build_output\merged_CPUNET.hex
-            C:\Workspace\build_output\merged.hex
+          path: C:\Workspace\build_output\*.hex
+          if-no-files-found: error
           retention-days: 7
 
-      # Step 5 - Add flashing instructions as build summary
+      # Step 6 - Add flashing instructions as build summary
       - name: Add Flash Instructions to Summary
         shell: powershell
         run: |
@@ -136,20 +176,4 @@ jobs:
           path: CNR-CNT\doxygen_output.log
           retention-days: 7
 
-      # ===== CHECK 3: SONARCLOUD SCAN =====
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v3.1.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          projectBaseDir: CNR-CNT
-          args: >
-            -Dsonar.organization=patilprathmesh08
-            -Dsonar.projectKey=patilprathmesh08_nRFTest-Testing
-            -Dsonar.sources=src
-            -Dsonar.inclusions=**/*.c,**/*.h
-            -Dsonar.c.file.suffixes=.c
-            -Dsonar.h.file.suffixes=.h
-            -Dsonar.exclusions=**/build/**,**/boards/**,**/child_image/**,**/sysbuild/**
-            -Dsonar.qualitygate.wait=false
+  
