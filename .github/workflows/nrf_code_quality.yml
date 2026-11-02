@@ -11,7 +11,7 @@ on:
       - main
 
 jobs:
-  # ─── JOB 1: BUILD FIRMWARE ──────────────────────────────────────────────────
+  # ===== JOB 1: BUILD FIRMWARE =====
   build:
     name: Build nRF7002 Firmware
     runs-on: ubuntu-latest
@@ -72,30 +72,40 @@ jobs:
           pip3 install -r ncs/nrf/scripts/requirements.txt
           pip3 install -r ncs/bootloader/mcuboot/scripts/requirements.txt
 
-      # Step 9 - Build nRF7002 firmware using West + Sysbuild
+      # Step 9 - Check project folder exists (clear error if folder name is wrong)
+      - name: Check Project Folder
+        run: |
+          echo "Repository content:"
+          ls -la nrftest-testing
+          if [ ! -d nrftest-testing/CNR-CNT ]; then
+            echo "ERROR: Folder CNR-CNT not found in repository"
+            exit 1
+          fi
+
+      # Step 10 - Build nRF7002 firmware using West + Sysbuild
       - name: Build nRF7002 Firmware
         run: |
           cd ncs
           west build -b nrf7002dk/nrf5340/cpuapp/ns \
-            ../nrftest-testing/CNR-Joyastic \
+            ../nrftest-testing/CNR-CNT \
             --sysbuild \
-            -d ../nrftest-testing/CNR-Joyastic/build
+            -d ../nrftest-testing/CNR-CNT/build
 
-      # Step 10 - Show memory usage
+      # Step 11 - Show memory usage for every image (app core and network core)
       - name: Show Memory Usage
         run: |
-          echo "=== Application Core Memory Usage ==="
-          size nrftest-testing/CNR-Joyastic/build/CNR-Joyastic/zephyr/zephyr.elf || true
-          echo "=== Network Core Memory Usage ==="
-          size nrftest-testing/CNR-Joyastic/build/ipc_radio/zephyr/zephyr.elf || true
+          for elf in nrftest-testing/CNR-CNT/build/*/zephyr/zephyr.elf; do
+            echo "=== $elf ==="
+            arm-zephyr-eabi-size "$elf" || true
+          done
 
-      # Step 11 - List all build output files
+      # Step 12 - List all build output files
       - name: List Build Output Files
         run: |
           echo "=== Build output files ==="
-          find nrftest-testing/CNR-Joyastic/build -name "*.hex" -o -name "*.elf" -o -name "*.bin" | sort
+          find nrftest-testing/CNR-CNT/build \( -name "*.hex" -o -name "*.elf" -o -name "*.bin" \) | sort
 
-      # Step 12 - Upload ALL firmware artifacts
+      # Step 13 - Upload ALL firmware artifacts
       # Flash order on board:
       # 1. merged_CPUNET.hex first (network core - ipc_radio)
       # 2. merged.hex second (application core)
@@ -104,13 +114,13 @@ jobs:
         with:
           name: nrf7002-firmware
           path: |
-            nrftest-testing/CNR-Joyastic/build/merged_CPUNET.hex
-            nrftest-testing/CNR-Joyastic/build/merged.hex
-            nrftest-testing/CNR-Joyastic/build/CNR-Joyastic/zephyr/zephyr.elf
-            nrftest-testing/CNR-Joyastic/build/CNR-Joyastic/zephyr/zephyr.bin
+            nrftest-testing/CNR-CNT/build/merged_CPUNET.hex
+            nrftest-testing/CNR-CNT/build/merged.hex
+            nrftest-testing/CNR-CNT/build/*/zephyr/zephyr.elf
+            nrftest-testing/CNR-CNT/build/*/zephyr/zephyr.bin
           retention-days: 7
 
-      # Step 13 - Add flashing instructions as build summary
+      # Step 14 - Add flashing instructions as build summary
       - name: Add Flash Instructions to Summary
         run: |
           echo "## Flash Instructions" >> $GITHUB_STEP_SUMMARY
@@ -127,7 +137,7 @@ jobs:
           echo "merged.hex" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
-  # ─── JOB 2: CODE QUALITY CHECKS ─────────────────────────────────────────────
+  # ===== JOB 2: CODE QUALITY CHECKS =====
   # Runs in parallel with build job
   code-quality:
     name: Code Quality Checks
@@ -146,17 +156,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y doxygen graphviz
 
-      # ─── CHECK 1: HEADER AND COPYRIGHT NOTICE (WARNING ONLY) ────────────────
+      # ===== CHECK 1: HEADER AND COPYRIGHT NOTICE (WARNING ONLY) =====
       - name: Check File Headers and Copyright Notice
         run: |
-          echo "Checking copyright headers in CNR-Joyastic/src/ only..."
+          echo "Checking copyright headers in CNR-CNT/src/ only..."
           MISSING=0
           while IFS= read -r file; do
             if ! grep -q "Copyright\|copyright\|LICENSE\|license\|Author\|author\|SPDX" "$file"; then
               echo "WARNING - MISSING HEADER: $file"
               MISSING=$((MISSING + 1))
             fi
-          done < <(find CNR-Joyastic/src -name "*.c" -o -name "*.h" 2>/dev/null)
+          done < <(find CNR-CNT/src -name "*.c" -o -name "*.h" 2>/dev/null)
           if [ "$MISSING" -gt 0 ]; then
             echo "---"
             echo "WARNING: $MISSING file(s) in src/ are missing copyright/header notice."
@@ -165,21 +175,21 @@ jobs:
             echo "PASSED: All files in src/ have copyright/header notice."
           fi
 
-      # ─── CHECK 2: DOXYGEN DOCUMENTATION CHECK (WARNING ONLY) ────────────────
+      # ===== CHECK 2: DOXYGEN DOCUMENTATION CHECK (WARNING ONLY) =====
       - name: Setup Doxyfile
-        working-directory: CNR-Joyastic
+        working-directory: CNR-CNT
         run: |
           if [ ! -f Doxyfile ]; then
             echo "No Doxyfile found, generating default..."
             doxygen -g Doxyfile
-            sed -i 's/PROJECT_NAME           = "My Project"/PROJECT_NAME           = "CNR-Joyastic"/' Doxyfile
+            sed -i 's/PROJECT_NAME           = "My Project"/PROJECT_NAME           = "CNR-CNT"/' Doxyfile
             sed -i 's|INPUT                  =|INPUT                  = src|' Doxyfile
             sed -i 's/RECURSIVE              = NO/RECURSIVE              = YES/' Doxyfile
             sed -i 's/EXTRACT_ALL            = NO/EXTRACT_ALL            = YES/' Doxyfile
           fi
 
       - name: Run Doxygen Check
-        working-directory: CNR-Joyastic
+        working-directory: CNR-CNT
         run: |
           echo "Running Doxygen..."
           doxygen Doxyfile 2>&1 | tee doxygen_output.log
@@ -198,17 +208,17 @@ jobs:
         if: always()
         with:
           name: nrf-doxygen-log
-          path: CNR-Joyastic/doxygen_output.log
+          path: CNR-CNT/doxygen_output.log
           retention-days: 7
 
-      # ─── CHECK 3: SONARCLOUD SCAN ────────────────────────────────────────────
+      # ===== CHECK 3: SONARCLOUD SCAN =====
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v3.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          projectBaseDir: CNR-Joyastic
+          projectBaseDir: CNR-CNT
           args: >
             -Dsonar.organization=patilprathmesh08
             -Dsonar.projectKey=patilprathmesh08_nRFTest-Testing
