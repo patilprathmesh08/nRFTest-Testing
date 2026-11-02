@@ -1,6 +1,7 @@
 name: nRF7002 CI Pipeline
 
 on:
+  # Manual run button: Actions tab > select this workflow > Run workflow
   workflow_dispatch:
   push:
     branches:
@@ -10,6 +11,9 @@ on:
     branches:
       - nRF-WiFi
       - main
+
+env:
+  NCS_VERSION: v3.4.0
 
 jobs:
   # ===== JOB 1: BUILD FIRMWARE =====
@@ -55,29 +59,38 @@ jobs:
           which cmake
           cmake --version
 
-      # Step 5 - Install Zephyr SDK v0.17.0
+      # Step 5 - Install Zephyr SDK 1.0.1
+      # NCS v3.4.0 release notes say its toolchain is based on Zephyr SDK v1.0.1
       # ZEPHYR_TOOLCHAIN_VARIANT and ZEPHYR_SDK_INSTALL_DIR are set explicitly
-      - name: Install Zephyr SDK
+      # Not tested on this repo yet. The gcc folder is searched because the SDK layout may differ from 0.17.0
+      - name: Install Zephyr SDK 1.0.1
         run: |
-          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64.tar.xz
-          tar xf zephyr-sdk-0.17.0_linux-x86_64.tar.xz -C $HOME
-          cd $HOME/zephyr-sdk-0.17.0
-          ./setup.sh -t arm-zephyr-eabi -h -c
-          echo "$HOME/zephyr-sdk-0.17.0/arm-zephyr-eabi/bin" >> $GITHUB_PATH
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/zephyr-sdk-1.0.1_linux-x86_64_gnu.tar.xz
+          tar xf zephyr-sdk-1.0.1_linux-x86_64_gnu.tar.xz -C $HOME
+          cd $HOME/zephyr-sdk-1.0.1
+          yes | ./setup.sh
+          GCC_PATH=$(find $HOME/zephyr-sdk-1.0.1 -type f -name arm-zephyr-eabi-gcc | head -n 1)
+          if [ -z "$GCC_PATH" ]; then
+            echo "ERROR: arm-zephyr-eabi-gcc not found inside Zephyr SDK 1.0.1"
+            exit 1
+          fi
+          echo "Compiler found at: $GCC_PATH"
+          echo "$(dirname "$GCC_PATH")" >> $GITHUB_PATH
           echo "ZEPHYR_TOOLCHAIN_VARIANT=zephyr" >> $GITHUB_ENV
-          echo "ZEPHYR_SDK_INSTALL_DIR=$HOME/zephyr-sdk-0.17.0" >> $GITHUB_ENV
+          echo "ZEPHYR_SDK_INSTALL_DIR=$HOME/zephyr-sdk-1.0.1" >> $GITHUB_ENV
 
       # Step 6 - Verify ARM toolchain
       - name: Verify ARM Toolchain
         run: arm-zephyr-eabi-gcc --version
 
       # Step 7 - Initialise nRF Connect SDK
-      # Version v3.3.4 matches the local build on the development PC
-      - name: Initialise nRF Connect SDK v3.3.4
+      # Version comes from NCS_VERSION at the top of this file (v3.4.0)
+      - name: Initialise nRF Connect SDK
         run: |
+          echo "Using nRF Connect SDK $NCS_VERSION"
           mkdir -p ncs
           cd ncs
-          west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.4
+          west init -m https://github.com/nrfconnect/sdk-nrf --mr $NCS_VERSION
           west update
           west zephyr-export
 
@@ -126,7 +139,7 @@ jobs:
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nrf7002-firmware
+          name: nrf7002-firmware-${{ env.NCS_VERSION }}
           path: |
             nrftest-testing/CNR-CNT/build/merged_CPUNET.hex
             nrftest-testing/CNR-CNT/build/merged.hex
