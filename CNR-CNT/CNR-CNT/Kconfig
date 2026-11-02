@@ -1,0 +1,186 @@
+#
+# Copyright (c) 2022 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+source "Kconfig.zephyr"
+
+menu "Nordic Sta sample"
+
+config CONNECTION_IDLE_TIMEOUT
+	int "Time to be waited for a station to connect"
+	default 30
+
+config NRF70_QSPI_ENCRYPTION_KEY
+	string "16 bytes QSPI encryption key, only for testing purposes"
+	depends on BOARD_NRF7002DK_NRF5340_CPUAPP
+	help
+	  Specify the QSPI encryption key
+
+config STA_CONN_TIMEOUT_SEC
+	int "Overall Connection timeout i.e., time to be waited for a station to connect and get an IP address"
+	# Zephyr DHCP retry is 1 minute, so set the default to 70 seconds
+	default 70
+	# 512 has no special meaning, just a reasonable upper limit
+	range 0 512
+	help
+	  Specify the connection timeout, in seconds. This is the overall timeout i.e., time to be waited for
+	  a station to connect and get an IP address. DHCP retries should be taken into account when setting
+	  this value. If the timeout is set to 0, the connection will not timeout.
+
+config STA_SAMPLE_START_WIFI_THREAD_STACK_SIZE
+	int "Stack size for Wi-Fi start thread"
+	default 4096
+	help
+	  Set the stack size for the Wi-Fi start thread.
+
+config WIFI_SURVEY_SCAN
+	bool "Log a full dual-band Wi-Fi scan before connecting"
+	default n
+	help
+	  Runs a scan across every band and channel the regulatory domain
+	  allows, immediately BEFORE the association attempt, and logs each
+	  AP found with its band, channel, RSSI and security. It then states
+	  explicitly whether the configured SSID was among them.
+
+	  Purpose: turn a bare "Connection failed (4)"
+	  (WIFI_STATUS_CONN_AP_NOT_FOUND) into a definite answer. Either the
+	  SSID is not on the air - wrong name, radio disabled on the router,
+	  or a channel the regulatory domain forbids - or it IS visible and
+	  the fault lies in the association itself. Those have completely
+	  different fixes.
+
+	  The nRF7002 is dual-band, so it is often the ONLY instrument that
+	  can see a 5 GHz network: a 2.4 GHz-only laptop adapter cannot
+	  confirm or deny that such an SSID exists.
+
+	  Runs before the connect, so the survey is in the log even when the
+	  connection then fails - which is the case it exists for.
+
+	  Costs up to WIFI_SCAN_WAIT_MAX_MS (20 s) of extra boot time and a
+	  burst of UART traffic, so leave this DISABLED in a production
+	  build. Scan failure is non-fatal: the board still attempts the
+	  connection it was configured for.
+
+choice SEND_TRIGGER
+	prompt "When to send frames"
+	default SEND_TRIGGER_CONTINUOUS
+	help
+	  Chooses what causes a frame to be built and transmitted. All three
+	  options are kept compiled-out alternatives of each other, so
+	  switching is a one-line prj.conf change with no source edits.
+
+config SEND_TRIGGER_CONTINUOUS
+	bool "Continuously, every sampler period"
+	help
+	  Once setup completes the board streams
+	  a frame every sampler period, forever. src/button.c is not
+	  compiled in at all.
+
+config SEND_TRIGGER_BUTTON_HOLD
+	bool "Only while DK Button 1 is held down"
+	help
+	  The sampler keeps ticking, but a frame is only built and sent
+	  while the button is physically held. Releasing it
+	  stops the stream immediately - the board goes silent rather than
+	  sending stale or zeroed frames.
+
+config SEND_TRIGGER_BUTTON_PRESS
+	bool "One frame per DK Button 1 press"
+	help
+	  Each debounced press of the button builds and sends EXACTLY ONE
+	  frame. Holding the button down does not repeat -
+	  only the rising edge counts, so a long press still sends one
+	  frame. Release and press again for the next.
+
+	  This is the mode to use for stepping through a recorded
+	  trajectory by hand, one sample at a time.
+
+endchoice
+
+config SEND_TRIGGER_NEEDS_BUTTON
+	bool
+	default y if SEND_TRIGGER_BUTTON_HOLD || SEND_TRIGGER_BUTTON_PRESS
+	help
+	  Internal, not user-settable. Single symbol for "this build needs
+	  src/button.c", so CMakeLists.txt does not have to test both button
+	  modes and cannot fall out of sync when a mode is added.
+
+	  Which button: the DK's silkscreen "Button 1" is devicetree alias
+	  sw0, node button0, P1.08 - NOT the node named button1, which is
+	  the second button on the board.
+
+	  Interaction with DEBUG_TFLITE: the replay row only advances when a
+	  frame is actually built, so either button mode PAUSES the recorded
+	  trajectory rather than skipping through it. The pass stays complete
+	  and in order across any number of presses, but it is no longer
+	  evenly spaced in time, which invalidates the filtered-output
+	  comparison described in src/replay_data.h. Use SEND_TRIGGER_CONTINUOUS
+	  for that comparison.
+
+	  Costs one GPIO read per tick and no RAM worth counting, which
+	  matters because RAM sits at roughly 98.4 % on this application.
+
+config DEBUG_TFLITE
+	bool "Replay recorded joystick data instead of reading the live ADC"
+	default n
+	help
+	  Feed frame_build() from the recorded trajectory in
+	  src/replay_data.c (generated from the customer harness's
+	  controller_data_log.csv, columns joystick_x and joystick_y)
+	  instead of from the joystick ADC. The JSON frame is byte-for-byte
+	  the same shape either way - only where the two joystick values
+	  come from changes - so the consumer and the downstream TFLite
+	  pipeline need no modification.
+
+	  Purpose: give the TFLite model a known, repeatable input so its
+	  output can be checked against the harness's reference
+	  motor_commands_output.csv. Read the pacing caveat at the top of
+	  src/replay_data.h before doing that comparison - it is not
+	  valid at every replay rate.
+
+	  The table is const, so it costs about 13.8 KB of FLASH and ZERO
+	  RAM. That matters: RAM on this application sits at roughly 98.3 %.
+
+	  Leave this disabled for normal operation.
+
+if DEBUG_TFLITE
+
+config DEBUG_TFLITE_LOOP
+	bool "Wrap to the first sample when the trajectory ends"
+	default y
+	help
+	  When the last recorded sample has been sent, start again from
+	  row 0 instead of holding the final value. Convenient for a soak
+	  test that needs no intervention.
+
+	  Be aware the wrap is a step discontinuity: the last row is
+	  followed immediately by the first, which is not a smooth return
+	  to centre. The harness's motion-based anchor logic sees that as
+	  one large jump, so discard the frames either side of a seam when
+	  comparing against the reference output.
+
+	  Disable to freeze on the last sample instead, which gives a
+	  clean single pass.
+
+config DEBUG_TFLITE_PERIOD_MS
+	int "Sampler and send period while replaying (ms)"
+	default 1000
+	range 10 60000
+	help
+	  Overrides SEND_PERIOD_MS in src/main.c for replay builds only.
+
+	  The default 1000 ms preserves the firmware's normal 1 Hz cadence,
+	  which means a full 1151-row pass takes about 19 minutes. The log
+	  was actually recorded at about 40 Hz, so set this to 25 to replay
+	  at the original rate - required if you intend to compare the
+	  harness's FILTERED motor output against its reference, because
+	  CascadedEMA is time-constant based.
+
+	  CAUTION: 25 ms is 40x the default traffic over TLS and has not
+	  been tested on this board. Raise it if frames are dropped.
+
+endif # DEBUG_TFLITE
+
+endmenu

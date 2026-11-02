@@ -1,0 +1,14 @@
+{
+    "nrf5-vscode.seggerEmbeddedStudioPath": "",
+    "sonarlint.pathToCompileCommands": "f:\\GA\\channel-Robotics\\nRF7002\\Projects\\wifi_https\\build_1\\wifi_https\\compile_commands.json",
+    "nrf-connect.taskBindings": {
+        "flash": [
+            {
+                "taskName": "gcc.exe build active file",
+                "buildConfigs": [
+                    "${workspaceFolder}\\build_1\\wifi_https"
+                ]
+            }
+        ]
+    }
+}
