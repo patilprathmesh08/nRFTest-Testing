@@ -202,14 +202,6 @@ jobs:
             echo "PASSED: No Doxygen warnings found."
           fi
 
-      - name: Upload Doxygen Log
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: nrf-doxygen-log
-          path: CNR-CNT/doxygen_output.log
-          retention-days: 7
-
       # Doxygen HTML documentation (download the zip and open index.html)
       - name: Upload Doxygen HTML
         uses: actions/upload-artifact@v4
