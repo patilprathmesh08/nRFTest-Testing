@@ -218,3 +218,21 @@ jobs:
           path: CNR-CNT/html
           if-no-files-found: warn
           retention-days: 7
+
+      # ===== CHECK 3: SONARCLOUD SCAN =====
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3.1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: CNR-CNT
+          args: >
+            -Dsonar.organization=patilprathmesh08
+            -Dsonar.projectKey=patilprathmesh08_nRFTest-Testing
+            -Dsonar.sources=src
+            -Dsonar.inclusions=**/*.c,**/*.h
+            -Dsonar.c.file.suffixes=.c
+            -Dsonar.h.file.suffixes=.h
+            -Dsonar.exclusions=**/build/**,**/boards/**,**/child_image/**,**/sysbuild/**
+            -Dsonar.qualitygate.wait=false
