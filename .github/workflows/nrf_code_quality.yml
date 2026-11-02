@@ -122,9 +122,6 @@ jobs:
           find nrftest-testing/CNR-CNT/build \( -name "*.hex" -o -name "*.elf" -o -name "*.bin" \) | sort
 
       # Step 13 - Upload ALL firmware artifacts
-      # Flash order on board:
-      # 1. merged_CPUNET.hex first (network core - ipc_radio)
-      # 2. merged.hex second (application core)
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -135,23 +132,6 @@ jobs:
             nrftest-testing/CNR-CNT/build/*/zephyr/zephyr.elf
             nrftest-testing/CNR-CNT/build/*/zephyr/zephyr.bin
           retention-days: 7
-
-      # Step 14 - Add flashing instructions as build summary
-      - name: Add Flash Instructions to Summary
-        run: |
-          echo "## Flash Instructions" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Flash in this exact order using nRF Connect Programmer:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Step 1** - Flash network core first:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "merged_CPUNET.hex" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Step 2** - Flash application core:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "merged.hex" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # ===== JOB 2: CODE QUALITY CHECKS =====
   # Runs in parallel with build job
@@ -202,6 +182,8 @@ jobs:
             sed -i 's|INPUT                  =|INPUT                  = src|' Doxyfile
             sed -i 's/RECURSIVE              = NO/RECURSIVE              = YES/' Doxyfile
             sed -i 's/EXTRACT_ALL            = NO/EXTRACT_ALL            = YES/' Doxyfile
+            sed -i 's/^GENERATE_HTML .*/GENERATE_HTML          = YES/' Doxyfile
+            sed -i 's/^GENERATE_LATEX .*/GENERATE_LATEX         = NO/' Doxyfile
           fi
 
       - name: Run Doxygen Check
@@ -226,3 +208,31 @@ jobs:
           name: nrf-doxygen-log
           path: CNR-CNT/doxygen_output.log
           retention-days: 7
+
+      # Doxygen HTML documentation (download the zip and open index.html)
+      - name: Upload Doxygen HTML
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nrf-doxygen-html
+          path: CNR-CNT/html
+          if-no-files-found: warn
+          retention-days: 7
+
+      # ===== CHECK 3: SONARCLOUD SCAN =====
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3.1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: CNR-CNT
+          args: >
+            -Dsonar.organization=patilprathmesh08
+            -Dsonar.projectKey=patilprathmesh08_nRFTest-Testing
+            -Dsonar.sources=src
+            -Dsonar.inclusions=**/*.c,**/*.h
+            -Dsonar.c.file.suffixes=.c
+            -Dsonar.h.file.suffixes=.h
+            -Dsonar.exclusions=**/build/**,**/boards/**,**/child_image/**,**/sysbuild/**
+            -Dsonar.qualitygate.wait=false
