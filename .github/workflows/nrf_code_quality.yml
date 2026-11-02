@@ -70,12 +70,13 @@ jobs:
       - name: Verify ARM Toolchain
         run: arm-zephyr-eabi-gcc --version
 
-      # Step 7 - Initialise nRF Connect SDK v3.3.0
-      - name: Initialise nRF Connect SDK v3.3.0
+      # Step 7 - Initialise nRF Connect SDK
+      # Version v3.3.4 matches the local build on the development PC
+      - name: Initialise nRF Connect SDK v3.3.4
         run: |
           mkdir -p ncs
           cd ncs
-          west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.0
+          west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.4
           west update
           west zephyr-export
 
@@ -97,10 +98,11 @@ jobs:
           fi
 
       # Step 10 - Build nRF7002 firmware using West + Sysbuild
+      # Board target without /ns, same as the local build (RAM overflowed with /ns)
       - name: Build nRF7002 Firmware
         run: |
           cd ncs
-          west build -b nrf7002dk/nrf5340/cpuapp/ns \
+          west build -b nrf7002dk/nrf5340/cpuapp \
             ../nrftest-testing/CNR-CNT \
             --sysbuild \
             -d ../nrftest-testing/CNR-CNT/build
