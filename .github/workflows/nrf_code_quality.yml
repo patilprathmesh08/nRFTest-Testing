@@ -1,6 +1,7 @@
 name: nRF7002 CI Pipeline
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - nRF-WiFi
