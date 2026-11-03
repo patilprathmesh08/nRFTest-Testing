@@ -1,4 +1,4 @@
-name: nRF7002 CI Pipeline
+name: CNR nRF7002 CI Pipeline
 
 on:
   # Manual run button: Actions tab > select this workflow > Run workflow
